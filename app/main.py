@@ -42,7 +42,7 @@ def main():
         print(request_headers)
 
         # create and send response
-        response = create_kafka_response(request_headers, "")
+        response = create_kafka_response(request_headers)
 
         client_socket.sendall(response)
         client_socket.shutdown(socket.SHUT_WR)
