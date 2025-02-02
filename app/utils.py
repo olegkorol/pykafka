@@ -1,25 +1,28 @@
 import struct
 
-def create_kafka_response(correlation_id, body):
+def create_kafka_response(request_headers: dict, body):
     """
     Create a Kafka response message with the following structure:
-    - Message Size (4 bytes)
-    - Header (Correlation ID)
+    - message_size (4 bytes)
+    - Header
+        - correlation_id (4 bytes)
     - Body
     """
-    # Encode the body (this is a placeholder - actual encoding depends on specific Kafka protocol)
-    body_bytes = body.encode('utf-8')
+    # encode the body (placeholder for not, body is not being used yet)
+    body_bytes = b''
     
-    # Construct header
+    # construct header using big-endian byte order
+    # i = 4-byte integer
+    # h = 2-byte short integer
     header = struct.pack( # used to convert integers to bytes
-        '>i',  # Big-endian: int (correlation_id)
-        correlation_id
+        '>i',
+        request_headers['correlation_id'],
     )
     
     # Combine header and body
     message_content = header + body_bytes
     
-    # Prepend message size (total length of header + body)
+    # Prepend with message_size (total length of header + body)
     message_size = len(message_content)
     full_message = struct.pack('>i', message_size) + message_content
     
