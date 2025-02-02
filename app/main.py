@@ -26,7 +26,7 @@ def main():
             chunk = client_socket.recv(remaining_bytes)
             data += chunk
             remaining_bytes -= len(chunk)
-        print(f"received raw data: {data}")
+        print(f"received HEX: {data.hex()}")
 
         # extract headers
         request_api_key = int.from_bytes(data[0:2], byteorder='big')
