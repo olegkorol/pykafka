@@ -1,6 +1,7 @@
 import sys
 import asyncio
 from asyncio import StreamReader, StreamWriter
+import configparser
 from app.utils import create_kafka_response, print_hex
 
 async def handle_client(client_reader: StreamReader, client_writer: StreamWriter):
@@ -66,7 +67,25 @@ async def handle_client(client_reader: StreamReader, client_writer: StreamWriter
         print("[server]\n closed connection")
 
 async def main():
-    PORT = 9092
+    if len(sys.argv) > 2:
+        print("Usage: ./your_program.sh /tmp/server.properties")
+        exit(64)
+
+    server_properties_file_path = None
+
+    if len(sys.argv) == 2:
+        server_properties_file_path = sys.argv[1]
+
+        try:
+            config = configparser.ConfigParser()
+            # read the properties file without requiring section headers
+            config.read_string('[DEFAULT]\n' + open(server_properties_file_path).read())
+        except Exception as e:
+            print(f"[server]\n error: {e}")
+            exit(1)
+
+    PORT = int(config.get('DEFAULT', 'port', fallback=9092)) if server_properties_file_path else 9092
+
     # server = socket.create_server(("localhost", PORT), reuse_port=True)
     server = await asyncio.start_server(
         handle_client,
