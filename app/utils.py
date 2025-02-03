@@ -1,29 +1,6 @@
 import struct
 from enum import Enum
-
-# supported API keys and their version ranges
-supported_apis = [
-    # (api_key, min_version, max_version)
-    (0, 0, 4),
-    (1, 0, 4),
-    (2, 0, 4),
-    (3, 0, 4),
-    (4, 0, 4),
-    (5, 0, 4),
-    (6, 0, 4),
-    (7, 0, 4),
-    (8, 0, 4),
-    (9, 0, 4),
-    (10, 0, 4),
-    (11, 0, 4),
-    (12, 0, 4),
-    (13, 0, 4),
-    (14, 0, 4),
-    (15, 0, 4),
-    (16, 0, 4),
-    (17, 0, 4),
-    (18, 0, 4),
-]
+from app.supported_apis import supported_apis
 
 class ErrorCodes(Enum):
     NO_ERRORS = 0 # custom one
@@ -34,10 +11,10 @@ def create_kafka_response(request_headers: dict, client_address: tuple | None = 
     Creates an ApiVersionResponse based on the Kafka specification (v4):
         - message_size => INT32
         - Header
-            - correlation_id => UINT32 (set to unsigned int, because some tests sent ids outside of the signed int32 range)
+            - correlation_id => UINT32
         - Body
             error_code => INT16
-            api_keys => UINT8
+            api_versions => ARRAY[ApiVersion]
                 api_key => INT16
                 min_version => INT16
                 max_version => INT16
@@ -56,10 +33,7 @@ def create_kafka_response(request_headers: dict, client_address: tuple | None = 
     #############################
     #      CONSTRUCT HEADER     #
     #############################
-    header = struct.pack( # used to convert integers to bytes
-        '>I',
-        request_headers['correlation_id'],
-    )
+    header = struct.pack('>I', request_headers['correlation_id'])
 
     #############################
     #       CONSTRUCT BODY      #
@@ -76,30 +50,39 @@ def create_kafka_response(request_headers: dict, client_address: tuple | None = 
     print(f"[debug - {client_address}]\n 'request_api_key' valid? {is_valid_api_key} -> (min_ver: {min_ver}, max_ver: {max_ver})")
     print(f"[debug - {client_address}]\n response 'error_code': {error_code.value} ({error_code.name})")
 
-    body_bytes = struct.pack('!h', error_code.value)  # error_code (INT16)
-    
-    # Number of API keys (VARINT, empirically 1 + 1)
-    body_bytes += struct.pack('!B', 1 + 1)  # 1 + 1 as a single byte
-    
-    # API key details
+    # Start with error code
+    body_bytes = struct.pack('!h', error_code.value)
+
+    # Collect API keys to include
+    api_keys_to_include = []
     for api in supported_apis:
-        if api[0] == request_api_key: # passing only data for the request_api_key (just for now?)
-            body_bytes += struct.pack('!hhh', *api)  # api_key, min_version, max_version
-            # TAG_BUFFER for API key (INT16)
-            body_bytes += struct.pack('!h', 0)
+        if api[0] == request_api_key:
+            api_keys_to_include.append(api)
+        if api[0] == 75:
+            api_keys_to_include.append(api)
+
+    # Number of API keys (must be +1 due to Kafka protocol quirk)
+    body_bytes += struct.pack('!B', len(api_keys_to_include) + 1)
+
+    # Pack each API key
+    for api in api_keys_to_include:
+        api_key, min_version, max_version = api[0], api[1], api[2]
+        print(f"Packing API {api_key}: min={min_version}, max={max_version}")
+        body_bytes += struct.pack('!hhhB', api_key, min_version, max_version, 0) # with buffer at end
     
+    # TAG_BUFFER for API key (INT16)
+    body_bytes += struct.pack('!B', 0)
+
     # Throttle time (INT32)
     body_bytes += struct.pack('!i', 0)
-    
+
     #############################
     #  CONSTRUCT FULL RESPONSE  #
     #############################
     message_content = header + body_bytes
-    
-    # Prepend with message_size (total length of header + body)
     message_size = len(message_content)
     full_message = struct.pack('!i', message_size) + message_content
-    
+
     return full_message
 
 def print_hex(data, bytes_per_line=16, with_ascii=False):
