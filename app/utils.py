@@ -29,12 +29,12 @@ class ErrorCodes(Enum):
     NO_ERRORS = 0 # custom one
     UNSUPPORTED_VERSION = 35
 
-def create_kafka_response(request_headers: dict, client_address):
+def create_kafka_response(request_headers: dict, client_address: tuple | None = None):
     """
     Creates an ApiVersionResponse based on the Kafka specification (v4):
         - message_size => INT32
         - Header
-            - correlation_id => INT32
+            - correlation_id => UINT32 (set to unsigned int, because some tests sent ids outside of the signed int32 range)
         - Body
             error_code => INT16
             api_keys => UINT8
@@ -48,6 +48,7 @@ def create_kafka_response(request_headers: dict, client_address):
         B = 1-byte unsigned integer (8 bits, UINT8)
         h = 2-byte short integer (16 bits, INT16)
         i = 4-byte integer (32 bits, INT32)
+        I = 4-byte unsigned integer (32 bits, INT32)
     
     FYI: 1 byte = 8 bits
     """
@@ -56,7 +57,7 @@ def create_kafka_response(request_headers: dict, client_address):
     #      CONSTRUCT HEADER     #
     #############################
     header = struct.pack( # used to convert integers to bytes
-        '>i',
+        '>I',
         request_headers['correlation_id'],
     )
 
@@ -72,8 +73,8 @@ def create_kafka_response(request_headers: dict, client_address):
 
     error_code = ErrorCodes.NO_ERRORS if is_valid_api_key and request_api_version in range(min_ver, max_ver + 1) else ErrorCodes.UNSUPPORTED_VERSION
 
-    print(f"[debug client:{client_address}]\n 'request_api_key' valid? {is_valid_api_key} -> (min_ver: {min_ver}, max_ver: {max_ver})")
-    print(f"[debug client:{client_address}]\n response 'error_code': {error_code.value} ({error_code.name})")
+    print(f"[debug - {client_address}]\n 'request_api_key' valid? {is_valid_api_key} -> (min_ver: {min_ver}, max_ver: {max_ver})")
+    print(f"[debug - {client_address}]\n response 'error_code': {error_code.value} ({error_code.name})")
 
     body_bytes = struct.pack('!h', error_code.value)  # error_code (INT16)
     
